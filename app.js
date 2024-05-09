@@ -1,116 +1,89 @@
 const express = require('express');
-const sqlite3 = require('sqlite3').verbose();
+const mongoose = require('mongoose');
 const bodyParser = require('body-parser');
 const bcrypt = require('bcrypt');
+
 
 const app = express();
 const port = 3000;
 
 // Middleware to parse request bodies
-app.use(bodyParser.urlencoded({ extended: true }));
+// support parsing of application/json type post data
+app.use(bodyParser.json());
+app.set('view engine', 'ejs');
+app.use(express.static("public"));
 
-// Set up an in-memory database
-const db = new sqlite3.Database(':memory:', (err) => {
-  if (err) {
-    return console.error(err.message);
+// Connect to MongoDB
+mongoose.connect('mongodb+srv://admin:Cosc_3060@cluster0.hus5d0u.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0')
+  .then(() => {
+    console.log("Connected to MongoDB Atlas");
+  })
+  .catch((err) => {
+    console.error("Error connecting to MongoDB Atlas", err);
+  });
+
+// Define user schema and model
+const userSchema = new mongoose.Schema({
+  username: String,
+  password: String  // Note: Never store passwords as plain text in production!
+});
+
+const User = mongoose.model('User', userSchema);
+
+// Insert users
+User.countDocuments({ username: 'admin' }).then((count) => {
+  if (count > 0) {
+    return;
   }
-  console.log('Connected to the in-memory SQlite database.');
+  new User({ username: 'admin', password: 'secret' }).save();
+});
+User.countDocuments({ username: 'john' }).then((count) => {
+  if (count > 0) {
+    return;
+  }
+  new User({ username: 'john', password: bcrypt.hashSync('nodejs', 10) }).save();
 });
 
-
-// Create users table and insert users
-db.serialize(() => {
-  db.run(`
-    CREATE TABLE users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-      username VARCHAR(100) NOT NULL,
-      password VARCHAR(60) NOT NULL
-    );`)
-    .run(`INSERT INTO users (username, password) VALUES ('admin', 'secret');`)
-    .run(`INSERT INTO users (username, password) VALUES ('john', ?);`,
-      [bcrypt.hashSync('nodejs', 10)]);
-});
-
-
-// Function to render HTML
-const renderHTML = (message = '') => {
-  return `
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-      <title>SQL Injection Example</title>
-    </head>
-    <body>
-      ${message ? `<p style="color: blue;">${message}</p>` : ''}
-
-      <h2>Tyrell Corp. Login</h2>
-      <p>Welcome to Tyrell Corporation. Enter login details below.</p>
-
-      <p>A few things to test:</p>
-      <ul>
-        <li>Login as user \`admin\` with password \`secret\`</li>
-        <li>Login as user \`admin\` with password \`<code>' OR 1 = 1 LIMIT 1;'</code>\`</li>
-        <li>Repeat with prepared statements checkbox enabled</li>
-        <li>Login as user \`john\` with password \`nodejs\` (it's broken, you will fix it in the activity class).</li>
-      </ul>
-
-      <form method="post">
-          <div class="form-group">
-              <label for="user">Username:</label>
-              <input type="text" name="user" id="user" value="admin" />
-          </div>
-          <div class="form-group">
-              <label for="pass">Password:</label>
-              <input type="password" name="pass" id="pass" value="" />
-          </div>
-          <div class="form-group">
-              <label for="ps">Enable prepared statements:</label>
-              <input type="checkbox" id="ps" name="ps" />
-          </div>
-
-          <input type="submit" name="login" value="Login" />
-      </form>
-    </body>
-    </html>
-  `;
-};
-
-// Routes
+// Handle endpoints
 app.get('/', (req, res) => {
-  res.send(renderHTML());
+  res.render('index');
 });
 
 app.post('/', (req, res) => {
-  const { user, pass, ps } = req.body;
-  let message = 'Login failed';
+  const { username, password, ps } = req.body;
 
-  const checkUser = (err, row) => {
+  console.log({ username, password, ps });
+
+  const handleError = (err) => {
     if (err) {
       console.error(err.message);
-      res.send(renderHTML('An error occurred.'));
-      return;
     }
-    if (row) {
-      message = `Login success with user \`${user}\` and pass \`${pass}\`.`;
-    } else {
-      message = 'Login failed';
-    }
-    res.send(renderHTML(message));
+    res.send('An error occurred.');
   };
 
-  if (ps === 'on') {
-    const sql = `SELECT * FROM users WHERE username = ?`;
-    db.get(sql, [user], (err, row) => {
-      if (row && bcrypt.compareSync(pass, row.password)) {
-        checkUser(err, row);
-      } else {
-        res.send(renderHTML('Login failed'));
-      }
-    });
+  if (!!ps === true) {
+    // Use Mongoose's built-in query language to prevent injection
+    User.findOne({ username })
+      .then((user) => {
+        if (user && bcrypt.compareSync(password, user.password)) {
+          res.send(`Login success with user ${user.username} and pass ${user.password}.`);
+        } else {
+          res.send('Login failed');
+        }
+      })
+      .catch((err) => handleError(err));
   } else {
-    // Note: This is insecure and added for educational purposes only
-    const sql = `SELECT * FROM users WHERE username = '${user}' AND password = '${pass}';`;
-    db.get(sql, [], checkUser);
+    // This is insecure and added for educational purposes only
+    // If you were to build a query using user input without sanitizing it, you could be vulnerable to injection
+    User.findOne({ username, password })
+      .then((user) => {
+        if (user) {
+          res.send(`Login success with user ${user.username} and pass ${user.password}.`);
+        } else {
+          res.send('Login failed');
+        }
+      })
+      .catch((err) => handleError(err));
   }
 });
 
