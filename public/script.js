@@ -3,9 +3,9 @@ function handleSubmit(e) {
 
   const username = document.querySelector('#username').value;
   const password = document.querySelector('#password').value;
-  const ps = document.querySelector('#ps').checked;
+  const secured = document.querySelector('#secured').checked;
 
-  console.log({ username, password, ps })
+  console.log({ username, password, secured })
 
   // Post the data
   fetch('/', {
@@ -13,7 +13,7 @@ function handleSubmit(e) {
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ username, password, ps }),
+    body: JSON.stringify({ username, password, secured }),
   })
     .then(response => response.text())
     .then(data => alert(data))

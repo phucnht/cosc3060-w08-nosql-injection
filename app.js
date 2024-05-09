@@ -50,9 +50,9 @@ app.get('/', (req, res) => {
 });
 
 app.post('/', (req, res) => {
-  const { username, password, ps } = req.body;
+  const { username, password, secured } = req.body;
 
-  console.log({ username, password, ps });
+  console.log({ username, password, secured });
 
   const handleError = (err) => {
     if (err) {
@@ -61,7 +61,7 @@ app.post('/', (req, res) => {
     res.send('An error occurred.');
   };
 
-  if (!!ps === true) {
+  if (!!secured === true) {
     // Use Mongoose's built-in query language to prevent injection
     User.findOne({ username })
       .then((user) => {
